@@ -1,0 +1,1714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Target Curve — from Impulse Response</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b1118;
+    --panel: #111a24;
+    --panel-2: #16222e;
+    --border: #223142;
+    --text: #e6edf3;
+    --muted: #93a4b5;
+    --accent: #4cc9f0;
+    --accent-2: #f72585;
+    --warn: #f9c74f;
+    --err: #ff6b6b;
+    --ok: #90be6d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    background: radial-gradient(1200px 600px at 20% -10%, #132434 0%, var(--bg) 60%);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 0 24px 48px; }
+  header { padding: 30px 0 8px; }
+  h1 { margin: 0 0 8px; font-size: clamp(24px, 3vw, 36px); letter-spacing: -0.02em; }
+  h1 span { color: var(--accent); }
+  .subtitle { margin: 0; max-width: 980px; color: var(--muted); }
+  .panel {
+    margin: 16px 0;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012));
+  }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .section-head h2 { margin: 0; font-size: 16px; }
+  .section-head h3 { margin: 0; font-size: 14px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .dropzone {
+    padding: 34px 20px;
+    border: 1.5px dashed #2c4258;
+    border-radius: 14px;
+    background: rgba(76,201,240,0.03);
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease, opacity .15s ease;
+  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: rgba(76,201,240,0.09); }
+  .dropzone.busy { opacity: .55; pointer-events: none; }
+  .dropzone strong { display: block; margin-bottom: 4px; font-size: 16px; }
+  .dropzone small { color: var(--muted); }
+  .file-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.02);
+  }
+  .file-content { min-width: 0; flex: 1 1 320px; }
+  .file-name { font-weight: 600; word-break: break-word; }
+  .file-meta { margin-top: 3px; color: var(--muted); font-size: 11px; }
+  .file-warning { margin-top: 5px; max-width: 720px; color: var(--warn); font-size: 11px; line-height: 1.4; }
+  .file-warning.error { color: var(--err); }
+  .channel-field { flex: 0 0 220px; }
+  .controls {
+    display: grid;
+    grid-template-columns: minmax(220px, 320px) auto;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: end;
+    margin-top: 14px;
+  }
+  .advanced-toggle-field button { white-space: nowrap; }
+  .advanced-panel {
+    margin-top: 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.02);
+  }
+  .advanced-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    align-items: end;
+  }
+  @media (max-width: 1000px) {
+    .controls { grid-template-columns: minmax(200px, 1fr) auto; }
+    .advanced-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 560px) {
+    .controls { grid-template-columns: 1fr; }
+    .advanced-grid { grid-template-columns: 1fr; }
+    .channel-field { flex-basis: 100%; }
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .fixed-value {
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.02);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .field > label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  select, input[type="number"], textarea {
+    width: 100%;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 10px;
+    font: inherit;
+    outline: none;
+  }
+  input[type="number"]:disabled, select:disabled { opacity: .5; }
+  select:focus, input[type="number"]:focus, textarea:focus { border-color: var(--accent); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  button {
+    padding: 9px 13px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    transition: transform .1s ease, border-color .1s ease, background .1s ease, opacity .1s ease;
+  }
+  button:hover:not(:disabled) { transform: translateY(-1px); border-color: #365069; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: transparent; color: #04121a; font-weight: 600; }
+  button.ghost { background: rgba(255,255,255,0.02); }
+  button.link-button { padding: 4px 8px; font-size: 12px; color: var(--muted); }
+  .status { min-height: 20px; margin: 10px 0 0; color: var(--muted); font-size: 12px; }
+  .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .toolbar .status { flex: 1 1 240px; margin: 0; }
+  #notices { margin: 12px 0 0; }
+  .notice {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel-2);
+    font-size: 13px;
+  }
+  .notice.warn { border-color: rgba(249,199,79,0.4); background: rgba(249,199,79,0.08); color: #ffe6a3; }
+  .notice.err { border-color: rgba(255,107,107,0.4); background: rgba(255,107,107,0.08); color: #ffc4c4; }
+  .notice.info { border-color: rgba(76,201,240,0.35); background: rgba(76,201,240,0.07); color: #c9f0fd; }
+  .workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr);
+    gap: 16px;
+    margin: 16px 0;
+    align-items: stretch;
+  }
+  @media (max-width: 1000px) { .workspace { grid-template-columns: 1fr; } }
+  .chart-card { padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); display: flex; flex-direction: column; }
+  .chart-card canvas { display: block; width: 100%; border-radius: 8px; }
+  #chart-curve { height: 430px; flex: 1; min-height: 300px; }
+  @media (max-width: 1000px) { #chart-curve { height: 340px; } }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
+  .legend-item span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .swatch { display: inline-block; width: 14px; height: 3px; border-radius: 2px; flex: none; }
+  .swatch.dash { background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px); height: 2px; }
+  .output-card { padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); display: flex; flex-direction: column; min-width: 0; }
+  .output-card .section-head { margin-bottom: 10px; }
+  #output {
+    flex: 1;
+    min-height: 530px;
+    height: 530px;
+    resize: vertical;
+    background: #0a121a;
+    border-color: var(--border);
+    font: 11px/1.42 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre;
+    overflow: auto;
+    tab-size: 4;
+  }
+  @media (max-width: 1000px) { #output { min-height: 320px; height: 320px; } }
+  .output-hint { margin-top: 8px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  footer { color: var(--muted); font-size: 12px; padding: 8px 0 0; }
+  footer p { max-width: 1050px; }
+  .test-output { margin-top: 10px; padding: 12px; max-height: 280px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: #0a121a; font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+  .test-output .pass { color: var(--ok); }
+  .test-output .fail { color: var(--err); }
+  #toast {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 20;
+    max-width: min(420px, 90vw);
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #1b2a3a;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.err { border-color: rgba(255,107,107,0.55); color: #ffc4c4; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Target Curve <span>— from Impulse Response</span></h1>
+    <p class="subtitle">Drag and drop an impulse response <strong>.wav</strong> file. The app computes its RTA, applies fractional-octave smoothing, and builds a copy-pasteable 31-point target curve.</p>
+  </header>
+
+  <section class="panel">
+    <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Select a WAV impulse response">
+      <strong>Drag and drop a .wav impulse response here</strong>
+      <small>or click to select · HouseCurve-style IR · processed entirely on your device</small>
+    </div>
+    <input id="file-input" type="file" accept=".wav,audio/wav,audio/x-wav" hidden>
+
+    <div id="file-card" class="file-card" hidden>
+      <div class="file-content">
+        <div id="file-name" class="file-name"></div>
+        <div id="file-meta" class="file-meta"></div>
+        <div id="file-warning" class="file-warning" hidden></div>
+      </div>
+      <div class="field channel-field">
+        <label for="channel">Channel</label>
+        <select id="channel" disabled></select>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="field">
+        <label for="smoothing">Smoothing</label>
+        <select id="smoothing">
+          <option value="0.3333333333">1/3 octave</option>
+          <option value="0.5">1/2 octave</option>
+          <option value="1" selected>1 octave</option>
+          <option value="2">2 octaves</option>
+          <option value="3">3 octaves</option>
+        </select>
+      </div>
+      <div class="field advanced-toggle-field">
+        <label>&nbsp;</label>
+        <button id="advanced-toggle" class="ghost" type="button" aria-expanded="false" aria-controls="advanced-panel">Advanced settings</button>
+      </div>
+    </div>
+
+    <div id="advanced-panel" class="advanced-panel" hidden>
+      <div class="advanced-grid">
+        <div class="field">
+          <label for="window-ms">IR window</label>
+          <select id="window-ms">
+            <option value="125">125 ms</option>
+            <option value="250">250 ms</option>
+            <option value="500" selected>500 ms</option>
+            <option value="1000">1000 ms</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="anchor">Anchor frequency (Hz)</label>
+          <input id="anchor" type="number" min="5" max="40000" step="1" value="1000">
+        </div>
+        <div class="field">
+          <label>Output</label>
+          <div class="fixed-value">31 points (fixed)</div>
+        </div>
+        <div class="field">
+          <label for="fmin">Low limit (Hz)</label>
+          <input id="fmin" type="number" min="5" max="40000" step="1" value="20">
+        </div>
+        <div class="field">
+          <label for="fmax">High limit (Hz)</label>
+          <input id="fmax" type="number" min="10" max="200000" step="10" value="20000">
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button id="reset-settings" class="ghost" type="button">Reset settings</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div id="status" class="status" aria-live="polite"></div>
+      <div class="actions">
+        <button id="clear" class="ghost" disabled>Clear</button>
+        <button id="copy" class="primary" disabled>Copy target curve</button>
+        <button id="download" class="ghost" disabled>Download .txt</button>
+      </div>
+    </div>
+    <div id="notices" aria-live="polite"></div>
+  </section>
+
+  <section class="workspace">
+    <div class="chart-card">
+      <div class="section-head">
+        <h3>RTA → target curve</h3>
+        <span id="chart-summary" class="muted small">No data</span>
+      </div>
+      <canvas id="chart-curve" role="img" aria-label="RTA and target curve chart"></canvas>
+      <div id="legend" class="legend"></div>
+    </div>
+
+    <div class="output-card">
+      <div class="section-head">
+        <h2>Target curve</h2>
+        <span id="output-meta" class="muted small">No data</span>
+      </div>
+      <textarea id="output" readonly spellcheck="false" aria-label="Target curve text, frequency in Hz and gain in dB" placeholder="Drop an impulse response to generate a target curve..."></textarea>
+      <div class="output-hint">HouseCurve / REW text format: exactly 31 points (standard 1/3-octave frequencies at the default 20 Hz–20 kHz range), frequency (Hz) and gain (dB), tab separated. The target curve is the smoothed RTA, normalized at the anchor frequency. Save as .txt or .frd, or copy and paste into your target curve editor.</div>
+    </div>
+  </section>
+
+  <footer>
+    <div id="selftest-panel" hidden>
+      <div id="selftest-output" class="test-output"></div>
+    </div>
+    <p>The target curve is the smoothed RTA, normalized at the anchor frequency and exported at 31 standard 1/3-octave points. All processing happens locally in your browser.</p>
+    <button id="selftest" class="link-button" type="button">Run self-test</button>
+  </footer>
+</div>
+<div id="toast" role="status"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  const CHART_FONT = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  const DEFAULTS = {
+    smoothingOct: 1,
+    anchorHz: 1000,
+    windowMs: 500,
+    fMin: 20,
+    fMax: 20000
+  };
+  const ISO_THIRD_OCTAVE = [
+    20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160,
+    200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600,
+    2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000
+  ];
+
+  const els = {
+    dropzone: document.getElementById('dropzone'),
+    fileInput: document.getElementById('file-input'),
+    fileCard: document.getElementById('file-card'),
+    fileName: document.getElementById('file-name'),
+    fileMeta: document.getElementById('file-meta'),
+    fileWarning: document.getElementById('file-warning'),
+    channel: document.getElementById('channel'),
+    smoothing: document.getElementById('smoothing'),
+    advancedToggle: document.getElementById('advanced-toggle'),
+    advancedPanel: document.getElementById('advanced-panel'),
+    windowMs: document.getElementById('window-ms'),
+    anchor: document.getElementById('anchor'),
+    fMin: document.getElementById('fmin'),
+    fMax: document.getElementById('fmax'),
+    resetSettings: document.getElementById('reset-settings'),
+    clear: document.getElementById('clear'),
+    copy: document.getElementById('copy'),
+    download: document.getElementById('download'),
+    status: document.getElementById('status'),
+    notices: document.getElementById('notices'),
+    chart: document.getElementById('chart-curve'),
+    chartSummary: document.getElementById('chart-summary'),
+    legend: document.getElementById('legend'),
+    output: document.getElementById('output'),
+    outputMeta: document.getElementById('output-meta'),
+    selftest: document.getElementById('selftest'),
+    selftestPanel: document.getElementById('selftest-panel'),
+    selftestOutput: document.getElementById('selftest-output'),
+    toast: document.getElementById('toast')
+  };
+
+  const state = {
+    file: null,
+    analysis: null,
+    curve: null,
+    analysisError: null,
+    curveError: null,
+    smoothingOct: DEFAULTS.smoothingOct,
+    anchorHz: DEFAULTS.anchorHz,
+    windowMs: DEFAULTS.windowMs,
+    fMin: DEFAULTS.fMin,
+    fMax: DEFAULTS.fMax,
+    channelIndex: 0,
+    busy: false
+  };
+
+  let toastTimer = 0;
+  let curveTimer = 0;
+  let resizeTimer = 0;
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function createEl(tag, className, text) {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text != null) el.textContent = text;
+    return el;
+  }
+
+  function fmtRate(hz) {
+    if (!Number.isFinite(hz)) return '';
+    const khz = hz / 1000;
+    return (Number.isInteger(khz) ? String(khz) : khz.toFixed(1)) + ' kHz';
+  }
+
+  function fmtBytes(bytes) {
+    if (!Number.isFinite(bytes)) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function fmtHz(hz) {
+    if (!Number.isFinite(hz)) return '—';
+    if (hz >= 1000) return (hz / 1000).toFixed(Number.isInteger(hz / 1000) ? 0 : 1) + ' kHz';
+    return (hz >= 100 ? hz.toFixed(0) : hz.toFixed(1)) + ' Hz';
+  }
+
+  function fmtFrequencyValue(hz) {
+    if (hz >= 100) return hz.toFixed(1);
+    return hz.toFixed(2);
+  }
+
+  function smoothingLabel(oct) {
+    if (!(oct > 0)) return 'off';
+    if (oct >= 1) return (Number.isInteger(oct) ? String(oct) : oct.toFixed(1)) + ' oct';
+    return '1/' + Math.round(1 / oct) + ' oct';
+  }
+
+  function timestamp() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+
+  function writeAscii(bytes, offset, text) {
+    for (let i = 0; i < text.length; i += 1) bytes[offset + i] = text.charCodeAt(i);
+  }
+
+  function readAscii(bytes, offset, length) {
+    let out = '';
+    for (let i = 0; i < length; i += 1) out += String.fromCharCode(bytes[offset + i]);
+    return out;
+  }
+
+  function showToast(message, type) {
+    els.toast.textContent = message;
+    els.toast.className = 'show' + (type === 'err' ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { els.toast.className = ''; }, 3400);
+  }
+
+  function parseWav(arrayBuffer) {
+    if (arrayBuffer.byteLength < 44) throw new Error('File is too small to be a WAV');
+    const bytes = new Uint8Array(arrayBuffer);
+    const view = new DataView(arrayBuffer);
+    if (readAscii(bytes, 0, 4) !== 'RIFF' || readAscii(bytes, 8, 4) !== 'WAVE') {
+      throw new Error('Not a valid RIFF/WAVE file');
+    }
+    const warnings = [];
+    let fmtInfo = null;
+    let dataOffset = -1;
+    let dataSize = 0;
+    let offset = 12;
+    while (offset + 8 <= bytes.length) {
+      const id = readAscii(bytes, offset, 4);
+      const size = view.getUint32(offset + 4, true);
+      const body = offset + 8;
+      if (id === 'fmt ') {
+        if (size < 16 || body + 16 > bytes.length) throw new Error('Invalid fmt chunk');
+        let formatCode = view.getUint16(body, true);
+        const channels = view.getUint16(body + 2, true);
+        const sampleRate = view.getUint32(body + 4, true);
+        const blockAlign = view.getUint16(body + 12, true);
+        const bitsPerSample = view.getUint16(body + 14, true);
+        if (formatCode === 0xFFFE) {
+          if (size < 40 || body + 26 > bytes.length) throw new Error('WAVE_FORMAT_EXTENSIBLE is missing SubFormat');
+          formatCode = view.getUint16(body + 24, true);
+        }
+        fmtInfo = { formatCode, channels, sampleRate, blockAlign, bitsPerSample };
+      } else if (id === 'data' && dataOffset < 0) {
+        dataOffset = body;
+        const available = Math.max(0, bytes.length - body);
+        dataSize = Math.min(size, available);
+        if (size > available) warnings.push('Data chunk is truncated relative to the header');
+      }
+      const next = body + size + (size % 2);
+      if (next <= offset) break;
+      offset = next;
+    }
+    if (!fmtInfo) throw new Error('Missing fmt chunk');
+    if (dataOffset < 0 || dataSize <= 0) throw new Error('Missing data chunk or empty data');
+    const { formatCode, channels, sampleRate, blockAlign, bitsPerSample } = fmtInfo;
+    if (!sampleRate) throw new Error('Invalid sample rate');
+    if (!channels || channels > 32) throw new Error('Invalid channel count');
+    const bytesPerSample = bitsPerSample / 8;
+    if (formatCode !== 1 && formatCode !== 3) throw new Error('Only PCM or IEEE float is supported');
+    if (formatCode === 1 && bitsPerSample !== 16 && bitsPerSample !== 24 && bitsPerSample !== 32) {
+      throw new Error('PCM ' + bitsPerSample + '-bit is not supported');
+    }
+    if (formatCode === 3 && bitsPerSample !== 32 && bitsPerSample !== 64) {
+      throw new Error('Float ' + bitsPerSample + '-bit is not supported');
+    }
+    let frameSize = blockAlign > 0 ? blockAlign : bytesPerSample * channels;
+    if (frameSize < bytesPerSample * channels) {
+      frameSize = bytesPerSample * channels;
+      warnings.push('Invalid blockAlign; using calculated frame size');
+    }
+    const frameCount = Math.floor(dataSize / frameSize);
+    if (frameCount <= 0) throw new Error('No samples in the data chunk');
+    const channelData = [];
+    for (let ch = 0; ch < channels; ch += 1) channelData.push(new Float32Array(frameCount));
+    let nonFinite = 0;
+    for (let frame = 0; frame < frameCount; frame += 1) {
+      const base = dataOffset + frame * frameSize;
+      for (let ch = 0; ch < channels; ch += 1) {
+        const p = base + ch * bytesPerSample;
+        let v = 0;
+        if (formatCode === 1) {
+          if (bitsPerSample === 16) {
+            v = view.getInt16(p, true) / 32768;
+          } else if (bitsPerSample === 24) {
+            let q = bytes[p] | (bytes[p + 1] << 8) | (bytes[p + 2] << 16);
+            if (q & 0x800000) q -= 0x1000000;
+            v = q / 8388608;
+          } else {
+            v = view.getInt32(p, true) / 2147483648;
+          }
+        } else if (bitsPerSample === 32) {
+          v = view.getFloat32(p, true);
+        } else {
+          v = view.getFloat64(p, true);
+        }
+        if (!Number.isFinite(v)) {
+          nonFinite += 1;
+          v = 0;
+        }
+        channelData[ch][frame] = v;
+      }
+    }
+    if (nonFinite) warnings.push(nonFinite + ' invalid sample(s) replaced with 0');
+    return {
+      sampleRate,
+      channels,
+      bitsPerSample,
+      formatCode,
+      formatName: formatCode === 3 ? 'float' : 'PCM',
+      frameCount,
+      duration: frameCount / sampleRate,
+      channelData,
+      warnings
+    };
+  }
+
+  function fft(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i += 1) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) {
+        let t = re[i];
+        re[i] = re[j];
+        re[j] = t;
+        t = im[i];
+        im[i] = im[j];
+        im[j] = t;
+      }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+      const angle = -2 * Math.PI / len;
+      const wRe = Math.cos(angle);
+      const wIm = Math.sin(angle);
+      const half = len >> 1;
+      for (let i = 0; i < n; i += len) {
+        let curRe = 1;
+        let curIm = 0;
+        for (let j = 0; j < half; j += 1) {
+          const uRe = re[i + j];
+          const uIm = im[i + j];
+          const vRe = re[i + j + half] * curRe - im[i + j + half] * curIm;
+          const vIm = re[i + j + half] * curIm + im[i + j + half] * curRe;
+          re[i + j] = uRe + vRe;
+          im[i + j] = uIm + vIm;
+          re[i + j + half] = uRe - vRe;
+          im[i + j + half] = uIm - vIm;
+          const nextRe = curRe * wRe - curIm * wIm;
+          curIm = curRe * wIm + curIm * wRe;
+          curRe = nextRe;
+        }
+      }
+    }
+  }
+
+  function tukeyWindow(n, fs, fadeInMs, fadeOutFraction) {
+    const w = new Float64Array(n);
+    const fadeIn = Math.max(1, Math.min(Math.floor(n / 4), Math.round(fs * fadeInMs / 1000)));
+    const fadeOut = Math.max(1, Math.min(Math.floor(n / 2), Math.round(n * fadeOutFraction)));
+    for (let i = 0; i < n; i += 1) {
+      let g = 1;
+      if (i < fadeIn) g = 0.5 - 0.5 * Math.cos(Math.PI * i / fadeIn);
+      const j = n - 1 - i;
+      if (j < fadeOut) g = Math.min(g, 0.5 - 0.5 * Math.cos(Math.PI * j / fadeOut));
+      w[i] = g;
+    }
+    return w;
+  }
+
+  function computeAnalysis(file, channelIndex, windowMs) {
+    const x = file.channelData[channelIndex];
+    if (!x) throw new Error('Selected channel is not available');
+    const n = x.length;
+    if (n < 64) throw new Error('File is too short to analyze');
+    const fs = file.sampleRate;
+    if (!(fs > 0)) throw new Error('Invalid sample rate');
+    let mean = 0;
+    for (let i = 0; i < n; i += 1) mean += x[i];
+    mean /= n;
+    let maxAbs = 0;
+    let peakIndex = 0;
+    for (let i = 0; i < n; i += 1) {
+      const a = Math.abs(x[i] - mean);
+      if (a > maxAbs) {
+        maxAbs = a;
+        peakIndex = i;
+      }
+    }
+    if (!(maxAbs > 1e-12)) throw new Error('Signal is nearly silent');
+
+    const preRoll = Math.round(fs * 0.02);
+    const totalSamples = Math.max(64, Math.round(fs * windowMs / 1000));
+    const maxLength = 1 << 19;
+    const start = Math.max(0, peakIndex - preRoll);
+    const length = Math.min(totalSamples, n - start, maxLength);
+    const segment = new Float64Array(length);
+    for (let i = 0; i < length; i += 1) segment[i] = x[start + i] - mean;
+
+    const win = tukeyWindow(length, fs, 10, 0.5);
+    let nfft = 1;
+    while (nfft < length) nfft <<= 1;
+    nfft = Math.min(1 << 20, Math.max(1024, nfft * 2));
+
+    const re = new Float64Array(nfft);
+    const im = new Float64Array(nfft);
+    for (let i = 0; i < length; i += 1) re[i] = segment[i] * win[i];
+    fft(re, im);
+
+    const binHz = fs / nfft;
+    const nBins = nfft / 2 + 1;
+    const power = new Float64Array(nBins);
+    for (let k = 0; k < nBins; k += 1) {
+      power[k] = re[k] * re[k] + im[k] * im[k];
+    }
+
+    const warnings = [];
+    if (peakIndex < Math.round(fs * 0.002)) warnings.push('Impulse peak is very close to the start of the file');
+    if (peakIndex > n - Math.round(fs * 0.002)) warnings.push('Impulse peak is very close to the end of the file');
+    if (length < totalSamples) warnings.push('File is shorter than the selected IR window; using ' + (length / fs * 1000).toFixed(0) + ' ms');
+
+    return {
+      fs,
+      nfft,
+      binHz,
+      nBins,
+      power,
+      peakIndex,
+      peakTimeMs: peakIndex / fs * 1000,
+      maxAbs,
+      mean,
+      startIndex: start,
+      segmentStartMs: start / fs * 1000,
+      segmentLength: length,
+      windowMs: length / fs * 1000,
+      requestedWindowMs: windowMs,
+      channelIndex,
+      warnings
+    };
+  }
+
+  function computeSmoothedDb(analysis, smoothingOct) {
+    const { power, binHz, nBins } = analysis;
+    const db = new Float64Array(nBins);
+    if (!(smoothingOct > 0)) {
+      for (let k = 0; k < nBins; k += 1) db[k] = 10 * Math.log10(Math.max(power[k], 1e-30));
+      return db;
+    }
+    const half = smoothingOct / 2;
+    const loRatio = Math.pow(2, -half);
+    const hiRatio = Math.pow(2, half);
+    const prefix = new Float64Array(nBins + 1);
+    for (let k = 0; k < nBins; k += 1) prefix[k + 1] = prefix[k] + power[k];
+    for (let k = 1; k < nBins; k += 1) {
+      const f = k * binHz;
+      const lo = Math.max(1, Math.ceil(f * loRatio / binHz));
+      const hi = Math.min(nBins - 1, Math.floor(f * hiRatio / binHz));
+      let p;
+      if (hi < lo) {
+        p = power[k];
+      } else {
+        p = (prefix[hi + 1] - prefix[lo]) / (hi - lo + 1);
+      }
+      db[k] = 10 * Math.log10(Math.max(p, 1e-30));
+    }
+    db[0] = nBins > 1 ? db[1] : 0;
+    return db;
+  }
+
+  function interpDb(db, binHz, f) {
+    const pos = f / binHz;
+    if (!(pos > 0)) return db[0];
+    const i = Math.floor(pos);
+    if (i >= db.length - 1) return db[db.length - 1];
+    const t = pos - i;
+    return db[i] * (1 - t) + db[i + 1] * t;
+  }
+
+  function buildOutputFrequencies(fMin, fMax) {
+    if (Math.abs(fMin - 20) < 0.01 && Math.abs(fMax - 20000) < 0.5) {
+      return ISO_THIRD_OCTAVE.slice();
+    }
+    const count = 31;
+    const out = [];
+    for (let i = 0; i < count; i += 1) {
+      out.push(fMin * Math.pow(fMax / fMin, i / (count - 1)));
+    }
+    out[0] = fMin;
+    out[count - 1] = fMax;
+    return out;
+  }
+
+  function computeCurveData(analysis, options) {
+    const smoothingOct = clamp(Number(options.smoothingOct) || 1, 0, 6);
+    const hardMax = analysis.fs * 0.5 * 0.98;
+    let fMin = clamp(Number(options.fMin) || 20, 5, Math.max(5, hardMax * 0.9));
+    let fMax = clamp(Number(options.fMax) || 20000, fMin * 1.02, Math.max(fMin * 1.02, hardMax));
+    if (!(fMax > fMin)) fMax = fMin * 1.02;
+    const anchor = clamp(Number(options.anchorHz) || 1000, fMin, fMax);
+
+    const smoothingDb = computeSmoothedDb(analysis, smoothingOct);
+    const rawDb = computeSmoothedDb(analysis, 0);
+    const norm = interpDb(smoothingDb, analysis.binHz, anchor);
+    if (!Number.isFinite(norm)) throw new Error('Could not normalize the response at the anchor frequency');
+
+    const freqs = buildOutputFrequencies(fMin, fMax);
+    const points = [];
+    for (const f of freqs) {
+      const target = interpDb(smoothingDb, analysis.binHz, f) - norm;
+      if (!Number.isFinite(target)) throw new Error('Response contains non-finite values');
+      points.push({ f, rta: target, db: target });
+    }
+
+    const chart = [];
+    const chartCount = 720;
+    for (let i = 0; i < chartCount; i += 1) {
+      const f = fMin * Math.pow(fMax / fMin, i / (chartCount - 1));
+      const rta = interpDb(smoothingDb, analysis.binHz, f) - norm;
+      const raw = interpDb(rawDb, analysis.binHz, f) - norm;
+      chart.push({ f, raw, rta });
+    }
+
+    return {
+      points,
+      chart,
+      fMin,
+      fMax,
+      anchor,
+      norm,
+      smoothingOct,
+      smoothingDb,
+      text: curveToText(points)
+    };
+  }
+
+  function curveToText(points) {
+    const lines = ['Hz\tdB'];
+    for (const p of points) {
+      lines.push(fmtFrequencyValue(p.f) + '\t' + p.db.toFixed(2));
+    }
+    return lines.join('\n');
+  }
+
+  function metaText(file, analysis) {
+    if (!file) return '';
+    if (file.error) return file.size ? fmtBytes(file.size) : '';
+    if (!file.sampleRate) return file.size ? fmtBytes(file.size) : '';
+    const parts = [
+      fmtRate(file.sampleRate),
+      file.channels === 1 ? 'mono' : file.channels + ' ch',
+      file.bitsPerSample + '-bit ' + file.formatName,
+      file.duration.toFixed(3) + ' s'
+    ];
+    if (analysis) {
+      parts.push('peak ' + analysis.peakTimeMs.toFixed(1) + ' ms');
+      parts.push('window ' + analysis.windowMs.toFixed(0) + ' ms');
+    }
+    return parts.join(' · ');
+  }
+
+  function renderFileCard() {
+    const file = state.file;
+    if (!file) {
+      els.fileCard.hidden = true;
+      els.fileName.textContent = '';
+      els.fileMeta.textContent = '';
+      els.fileWarning.hidden = true;
+      els.fileWarning.textContent = '';
+      return;
+    }
+    els.fileCard.hidden = false;
+    els.fileName.textContent = file.name;
+    els.fileMeta.textContent = metaText(file, state.analysis);
+    const warnings = [];
+    if (file.error) warnings.push(file.error);
+    if (file.parseWarnings && file.parseWarnings.length) warnings.push(file.parseWarnings.join('; '));
+    if (state.analysis && state.analysis.warnings && state.analysis.warnings.length) warnings.push(state.analysis.warnings.join('; '));
+    if (state.analysisError) warnings.push(state.analysisError);
+    if (state.curveError) warnings.push(state.curveError);
+    const isError = !!(file.error || state.analysisError || state.curveError);
+    els.fileWarning.hidden = warnings.length === 0;
+    els.fileWarning.className = 'file-warning' + (isError ? ' error' : '');
+    els.fileWarning.textContent = warnings.join(' · ');
+  }
+
+  function renderChannelSelect() {
+    const file = state.file;
+    const count = file && !file.error && file.channels ? file.channels : 0;
+    const key = count ? 'ch:' + count : 'none';
+    if (els.channel.dataset.key !== key) {
+      els.channel.textContent = '';
+      if (!count) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '—';
+        els.channel.appendChild(opt);
+      } else {
+        for (let i = 0; i < count; i += 1) {
+          const opt = document.createElement('option');
+          opt.value = String(i);
+          opt.textContent = count === 1 ? 'Mono' : 'Channel ' + (i + 1);
+          els.channel.appendChild(opt);
+        }
+      }
+      els.channel.dataset.key = key;
+    }
+    els.channel.disabled = state.busy || count <= 1;
+    if (count > 1) els.channel.value = String(state.channelIndex);
+  }
+
+  function renderNotices() {
+    const notices = [];
+    const file = state.file;
+    if (!file) {
+      notices.push({ type: 'info', text: 'Drop an impulse response .wav to generate a target curve. The target is derived from the RTA of the file.' });
+    }
+    if (file && file.error) {
+      notices.push({ type: 'err', text: 'This file could not be read: ' + file.error });
+    }
+    if (state.analysisError) {
+      notices.push({ type: 'err', text: 'RTA analysis failed: ' + state.analysisError });
+    }
+    if (state.curveError) {
+      notices.push({ type: 'err', text: 'Target curve generation failed: ' + state.curveError });
+    }
+    if (file && !file.error && state.analysis && state.curve) {
+      if (state.curve.fMax < state.fMax - 0.5) {
+        notices.push({ type: 'warn', text: 'High limit capped at ' + fmtHz(state.curve.fMax) + ' because the sample rate is ' + fmtRate(file.sampleRate) + '.' });
+      }
+      if (state.curve.fMin > state.fMin + 0.5) {
+        notices.push({ type: 'warn', text: 'Low limit raised to ' + fmtHz(state.curve.fMin) + ' for this sample rate.' });
+      }
+      if (state.curve.fMin < state.fMin - 0.5) {
+        notices.push({ type: 'warn', text: 'Low limit lowered to ' + fmtHz(state.curve.fMin) + ' for this sample rate.' });
+      }
+      if (state.curve.fMax > state.fMax + 0.5) {
+        notices.push({ type: 'warn', text: 'High limit raised to ' + fmtHz(state.curve.fMax) + ' so it stays above the low limit.' });
+      }
+      if (Math.abs(state.curve.anchor - state.anchorHz) > 0.5) {
+        notices.push({ type: 'warn', text: 'Anchor clamped to ' + fmtHz(state.curve.anchor) + ' to stay inside the curve range.' });
+      }
+      if (state.analysis.windowMs < 500 && state.curve.fMin < 40) {
+        notices.push({ type: 'warn', text: 'A ' + state.analysis.windowMs.toFixed(0) + ' ms IR window has limited low-frequency resolution; use 500 ms or 1000 ms for reliable bass.' });
+      }
+      if (state.analysis.segmentLength < Math.round(state.analysis.fs * state.analysis.requestedWindowMs / 1000)) {
+        notices.push({ type: 'warn', text: 'The file is shorter than the selected IR window; the full remaining IR was used.' });
+      }
+      if (file.channels > 1) {
+        notices.push({ type: 'info', text: 'Using channel ' + (state.channelIndex + 1) + ' of ' + file.channels + '. Switch channels in the file card.' });
+      }
+    }
+    els.notices.textContent = '';
+    if (!notices.length) {
+      els.notices.hidden = true;
+      return;
+    }
+    els.notices.hidden = false;
+    for (const n of notices) els.notices.appendChild(createEl('div', 'notice ' + n.type, n.text));
+  }
+
+  function fitCanvas(canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const w = Math.max(240, Math.round(rect.width));
+    const h = Math.max(160, Math.round(rect.height));
+    const bw = Math.round(w * dpr);
+    const bh = Math.round(h * dpr);
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw;
+      canvas.height = bh;
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w, h };
+  }
+
+  function drawEmptyChart(ctx, w, h, text) {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#0d1620';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#6f8497';
+    ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, w / 2, h / 2);
+  }
+
+  function niceStep(raw) {
+    if (!(raw > 0)) return 1;
+    const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / pow;
+    let mult;
+    if (n <= 1) mult = 1;
+    else if (n <= 2) mult = 2;
+    else if (n <= 5) mult = 5;
+    else mult = 10;
+    return mult * pow;
+  }
+
+  function freqAxisLabel(hz) {
+    if (hz >= 1000) {
+      const k = hz / 1000;
+      return (Number.isInteger(k) ? String(k) : k.toFixed(1)) + 'k';
+    }
+    return String(Math.round(hz));
+  }
+
+  function renderChart() {
+    const { ctx, w, h } = fitCanvas(els.chart);
+    const curve = state.curve;
+    if (!curve) {
+      drawEmptyChart(ctx, w, h, 'Drop an impulse response to generate a target curve');
+      els.chartSummary.textContent = 'No data';
+      renderLegend();
+      return;
+    }
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#0d1620';
+    ctx.fillRect(0, 0, w, h);
+
+    const m = { left: 54, right: 18, top: 24, bottom: 38 };
+    const pw = Math.max(10, w - m.left - m.right);
+    const ph = Math.max(10, h - m.top - m.bottom);
+    const logMin = Math.log10(curve.fMin);
+    const logMax = Math.log10(curve.fMax);
+    const mapX = (f) => m.left + (Math.log10(f) - logMin) / (logMax - logMin) * pw;
+
+    let minDb = Infinity;
+    let maxDb = -Infinity;
+    for (const p of curve.chart) {
+      if (Number.isFinite(p.rta)) {
+        if (p.rta < minDb) minDb = p.rta;
+        if (p.rta > maxDb) maxDb = p.rta;
+      }
+      if (Number.isFinite(p.raw)) {
+        if (p.raw < minDb) minDb = p.raw;
+        if (p.raw > maxDb) maxDb = p.raw;
+      }
+    }
+    if (!Number.isFinite(minDb) || !Number.isFinite(maxDb)) {
+      minDb = -10;
+      maxDb = 10;
+    }
+    if (maxDb - minDb < 12) {
+      const mid = (maxDb + minDb) / 2;
+      minDb = mid - 6;
+      maxDb = mid + 6;
+    } else {
+      const pad = (maxDb - minDb) * 0.08 + 0.5;
+      minDb -= pad;
+      maxDb += pad;
+    }
+    const step = Math.max(0.1, niceStep((maxDb - minDb) / 5));
+    const yMin = Math.floor(minDb / step) * step;
+    const yMax = Math.ceil(maxDb / step) * step;
+    const mapY = (db) => m.top + (yMax - db) / (yMax - yMin) * ph;
+
+    ctx.font = CHART_FONT;
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 1;
+
+    const majorFreqs = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+    const minorFreqs = [30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000];
+    for (const f of minorFreqs) {
+      if (f <= curve.fMin || f >= curve.fMax) continue;
+      const x = mapX(f);
+      ctx.strokeStyle = 'rgba(255,255,255,0.045)';
+      ctx.beginPath();
+      ctx.moveTo(x, m.top);
+      ctx.lineTo(x, m.top + ph);
+      ctx.stroke();
+    }
+    for (const f of majorFreqs) {
+      if (f <= curve.fMin || f >= curve.fMax) continue;
+      const x = mapX(f);
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.beginPath();
+      ctx.moveTo(x, m.top);
+      ctx.lineTo(x, m.top + ph);
+      ctx.stroke();
+    }
+
+    for (let db = yMin; db <= yMax + step * 0.5; db += step) {
+      const y = mapY(db);
+      ctx.strokeStyle = Math.abs(db) < step * 0.001 ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)';
+      ctx.beginPath();
+      ctx.moveTo(m.left, y);
+      ctx.lineTo(m.left + pw, y);
+      ctx.stroke();
+    }
+
+    if (curve.anchor > curve.fMin && curve.anchor < curve.fMax) {
+      const x = mapX(curve.anchor);
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(249,199,79,0.55)';
+      ctx.beginPath();
+      ctx.moveTo(x, m.top);
+      ctx.lineTo(x, m.top + ph);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(m.left, m.top, pw, ph);
+    ctx.clip();
+
+    ctx.beginPath();
+    let started = false;
+    for (const p of curve.chart) {
+      if (!Number.isFinite(p.raw)) continue;
+      const x = mapX(p.f);
+      const y = mapY(p.raw);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.strokeStyle = 'rgba(147,164,181,0.32)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.beginPath();
+    started = false;
+    for (const p of curve.chart) {
+      if (!Number.isFinite(p.rta)) continue;
+      const x = mapX(p.f);
+      const y = mapY(p.rta);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = '#93a4b5';
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.beginPath();
+    started = false;
+    for (const p of curve.points) {
+      if (!Number.isFinite(p.db)) continue;
+      const x = mapX(p.f);
+      const y = mapY(p.db);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.strokeStyle = '#4cc9f0';
+    ctx.lineWidth = 2.6;
+    ctx.shadowColor = 'rgba(76,201,240,0.35)';
+    ctx.shadowBlur = 7;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    for (const p of curve.points) {
+      if (!Number.isFinite(p.db)) continue;
+      const x = mapX(p.f);
+      const y = mapY(p.db);
+      ctx.beginPath();
+      ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = '#4cc9f0';
+      ctx.fill();
+      ctx.strokeStyle = '#0d1620';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.strokeRect(m.left, m.top, pw, ph);
+
+    ctx.fillStyle = '#8fa3b6';
+    ctx.textAlign = 'right';
+    for (let db = yMin; db <= yMax + step * 0.5; db += step) {
+      const label = Math.abs(db) < step * 0.001 ? '0' : (Math.abs(db) >= 10 ? db.toFixed(0) : db.toFixed(1));
+      ctx.fillText(label, m.left - 7, mapY(db));
+    }
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    let lastRight = -Infinity;
+    for (const f of majorFreqs) {
+      if (f < curve.fMin * 0.999 || f > curve.fMax * 1.001) continue;
+      const x = mapX(f);
+      const label = freqAxisLabel(f);
+      const tw = ctx.measureText(label).width;
+      if (x - tw / 2 > lastRight + 6) {
+        ctx.fillText(label, x, m.top + ph + 17);
+        lastRight = x + tw / 2;
+      }
+    }
+
+    ctx.fillStyle = '#8fa3b6';
+    ctx.textAlign = 'right';
+    ctx.fillText('Hz', w - 4, h - 6);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('dB', 10, m.top + 4);
+
+    els.chartSummary.textContent = curve.points.length + ' pts · ' + smoothingLabel(curve.smoothingOct);
+    renderLegend();
+  }
+
+  function addLegendItem(label, color, dashed) {
+    const item = createEl('span', 'legend-item');
+    const sw = createEl('span', 'swatch' + (dashed ? ' dash' : ''));
+    sw.style.background = dashed ? 'none' : color;
+    sw.style.color = color;
+    if (dashed) {
+      sw.style.background = 'repeating-linear-gradient(90deg, ' + color + ' 0 4px, transparent 4px 7px)';
+    }
+    item.appendChild(sw);
+    item.appendChild(createEl('span', '', label));
+    els.legend.appendChild(item);
+  }
+
+  function renderLegend() {
+    els.legend.textContent = '';
+    if (!state.curve) return;
+    addLegendItem('Raw RTA', 'rgba(147,164,181,0.45)', false);
+    addLegendItem('Smoothed RTA (' + smoothingLabel(state.curve.smoothingOct) + ')', '#93a4b5', true);
+    addLegendItem('Target curve (31 pts)', '#4cc9f0', false);
+  }
+
+  function renderOutput() {
+    const curve = state.curve;
+    if (!curve) {
+      if (els.output.value) els.output.value = '';
+      els.outputMeta.textContent = 'No data';
+      return;
+    }
+    if (els.output.value !== curve.text) els.output.value = curve.text;
+    els.outputMeta.textContent = curve.points.length + ' pts · ' + fmtHz(curve.fMin) + '–' + fmtHz(curve.fMax) + ' · ' + smoothingLabel(curve.smoothingOct) + ' · 0 dB @ ' + fmtHz(curve.anchor);
+  }
+
+  function updateButtons() {
+    const hasFile = !!state.file;
+    const hasCurve = !!state.curve;
+    els.clear.disabled = (!hasFile && !hasCurve) || state.busy;
+    els.copy.disabled = !hasCurve || state.busy;
+    els.download.disabled = !hasCurve || state.busy;
+    els.dropzone.classList.toggle('busy', state.busy);
+  }
+
+  function renderAll() {
+    renderFileCard();
+    renderChannelSelect();
+    renderNotices();
+    renderChart();
+    renderOutput();
+    updateButtons();
+  }
+
+  function setBusy(flag, text) {
+    state.busy = flag;
+    els.status.textContent = text || '';
+    els.dropzone.classList.toggle('busy', flag);
+    els.channel.disabled = flag || !state.file || !state.file.channels || state.file.channels <= 1;
+    updateButtons();
+  }
+
+  function rebuildAnalysis() {
+    state.analysis = null;
+    state.curve = null;
+    state.analysisError = null;
+    state.curveError = null;
+    if (!state.file || state.file.error) {
+      renderAll();
+      return;
+    }
+    if (state.channelIndex >= state.file.channels) state.channelIndex = 0;
+    try {
+      state.analysis = computeAnalysis(state.file, state.channelIndex, state.windowMs);
+    } catch (e) {
+      state.analysisError = e.message || String(e);
+      renderAll();
+      return;
+    }
+    rebuildCurve();
+  }
+
+  function rebuildCurve() {
+    if (!state.analysis) {
+      state.curve = null;
+      state.curveError = null;
+      renderAll();
+      return;
+    }
+    try {
+      state.curve = computeCurveData(state.analysis, {
+        smoothingOct: state.smoothingOct,
+        anchorHz: state.anchorHz,
+        fMin: state.fMin,
+        fMax: state.fMax
+      });
+      state.curveError = null;
+    } catch (e) {
+      state.curve = null;
+      state.curveError = e.message || String(e);
+    }
+    renderAll();
+  }
+
+  function scheduleCurve() {
+    clearTimeout(curveTimer);
+    curveTimer = setTimeout(rebuildCurve, 90);
+  }
+
+  function parseInputNumber(el, fallback) {
+    if (el.value == null || String(el.value).trim() === '') return fallback;
+    const value = Number(el.value);
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  async function handleFiles(fileList) {
+    if (state.busy) {
+      showToast('A file is already being processed; please wait.', 'err');
+      return;
+    }
+    const incoming = Array.from(fileList || []);
+    const wavFiles = incoming.filter((f) => /\.wav$/i.test(f.name) || /wav/i.test(f.type || ''));
+    if (!wavFiles.length) {
+      showToast('Only .wav impulse response files are supported.', 'err');
+      return;
+    }
+    if (wavFiles.length > 1) showToast('Using the first .wav file.', 'info');
+    const f = wavFiles[0];
+    setBusy(true, 'Reading ' + f.name + '...');
+    try {
+      const buf = await f.arrayBuffer();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const parsed = parseWav(buf);
+      state.file = {
+        name: f.name,
+        size: f.size,
+        lastModified: f.lastModified,
+        sampleRate: parsed.sampleRate,
+        channels: parsed.channels,
+        bitsPerSample: parsed.bitsPerSample,
+        formatCode: parsed.formatCode,
+        formatName: parsed.formatName,
+        frameCount: parsed.frameCount,
+        duration: parsed.duration,
+        channelData: parsed.channelData,
+        parseWarnings: parsed.warnings || [],
+        error: null
+      };
+      state.channelIndex = 0;
+      state.analysis = null;
+      state.curve = null;
+      state.analysisError = null;
+      state.curveError = null;
+      setBusy(false, '');
+      rebuildAnalysis();
+      showToast('Loaded ' + f.name + '.', 'info');
+    } catch (e) {
+      state.file = {
+        name: f.name,
+        size: f.size,
+        lastModified: f.lastModified,
+        error: e.message || String(e),
+        parseWarnings: []
+      };
+      state.channelIndex = 0;
+      state.analysis = null;
+      state.curve = null;
+      state.analysisError = null;
+      state.curveError = null;
+      setBusy(false, '');
+      renderAll();
+      showToast('Could not read this file. See details in the file card.', 'err');
+    }
+  }
+
+  function clearAll() {
+    state.file = null;
+    state.analysis = null;
+    state.curve = null;
+    state.analysisError = null;
+    state.curveError = null;
+    state.channelIndex = 0;
+    els.fileInput.value = '';
+    els.status.textContent = '';
+    renderAll();
+  }
+
+  async function copyText(text) {
+    if (window.focus) window.focus();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch (e) {}
+    }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    if (!ok) throw new Error('copy failed');
+  }
+
+  async function copyCurve() {
+    const curve = state.curve;
+    if (!curve) return;
+    try {
+      await copyText(curve.text);
+      showToast('Copied ' + curve.points.length + ' target curve points (HouseCurve/REW format).', 'info');
+    } catch (e) {
+      showToast('Copy failed. Use Download .txt instead.', 'err');
+    }
+  }
+
+  function sourceBaseName() {
+    if (!state.file || !state.file.name) return 'impulse';
+    return state.file.name.replace(/\.[^.]+$/, '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'impulse';
+  }
+
+  function downloadText(text, filename) {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function downloadCurve() {
+    const curve = state.curve;
+    if (!curve) return;
+    downloadText(curve.text, 'target-curve-' + sourceBaseName() + '-' + timestamp() + '.txt');
+    showToast('Target curve downloaded.', 'info');
+  }
+
+  function synthDeltaIR(fs, durationSec, peakMs) {
+    const n = Math.round(fs * durationSec);
+    const x = new Float32Array(n);
+    const p = Math.round(fs * peakMs / 1000);
+    if (p >= 0 && p < n) x[p] = 1;
+    return x;
+  }
+
+  function buildTestWav16(fs, samples) {
+    const n = samples.length;
+    const dataSize = n * 2;
+    const buf = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buf);
+    const bytes = new Uint8Array(buf);
+    writeAscii(bytes, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeAscii(bytes, 8, 'WAVE');
+    writeAscii(bytes, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, fs, true);
+    view.setUint32(28, fs * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeAscii(bytes, 36, 'data');
+    view.setUint32(40, dataSize, true);
+    for (let i = 0; i < n; i += 1) {
+      const v = clamp(samples[i], -1, 1);
+      view.setInt16(44 + i * 2, Math.round(v * 32767), true);
+    }
+    return buf;
+  }
+
+  function buildTestWavFloat32(fs, samples) {
+    const n = samples.length;
+    const dataSize = n * 4;
+    const buf = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buf);
+    const bytes = new Uint8Array(buf);
+    writeAscii(bytes, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeAscii(bytes, 8, 'WAVE');
+    writeAscii(bytes, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 3, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, fs, true);
+    view.setUint32(28, fs * 4, true);
+    view.setUint16(32, 4, true);
+    view.setUint16(34, 32, true);
+    writeAscii(bytes, 36, 'data');
+    view.setUint32(40, dataSize, true);
+    for (let i = 0; i < n; i += 1) view.setFloat32(44 + i * 4, samples[i], true);
+    return buf;
+  }
+
+  function buildTestWav24(fs, samples) {
+    const n = samples.length;
+    const dataSize = n * 3;
+    const buf = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buf);
+    const bytes = new Uint8Array(buf);
+    writeAscii(bytes, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeAscii(bytes, 8, 'WAVE');
+    writeAscii(bytes, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, fs, true);
+    view.setUint32(28, fs * 3, true);
+    view.setUint16(32, 3, true);
+    view.setUint16(34, 24, true);
+    writeAscii(bytes, 36, 'data');
+    view.setUint32(40, dataSize, true);
+    for (let i = 0; i < n; i += 1) {
+      let q = Math.round(clamp(samples[i], -1, 1) * 8388607);
+      if (q < 0) q += 0x1000000;
+      const p = 44 + i * 3;
+      bytes[p] = q & 0xff;
+      bytes[p + 1] = (q >> 8) & 0xff;
+      bytes[p + 2] = (q >> 16) & 0xff;
+    }
+    return buf;
+  }
+
+  function runSelfTest() {
+    const results = [];
+    const add = (label, pass, detail) => results.push({ label, pass: !!pass, detail: detail || '' });
+    try {
+      const n = 1024;
+      const re = new Float64Array(n);
+      const im = new Float64Array(n);
+      const toneBin = 64;
+      for (let i = 0; i < n; i += 1) re[i] = Math.cos(2 * Math.PI * toneBin * i / n);
+      fft(re, im);
+      const mag = Math.sqrt(re[toneBin] * re[toneBin] + im[toneBin] * im[toneBin]);
+      const other = Math.sqrt(re[toneBin + 1] * re[toneBin + 1] + im[toneBin + 1] * im[toneBin + 1]);
+      add('FFT tone peak ≈ N/2', Math.abs(mag - n / 2) < 1e-6, mag.toFixed(4));
+      add('FFT tone leakage is low', other < 1e-6, other.toFixed(8));
+
+      const fs = 48000;
+      const samples = synthDeltaIR(fs, 1.0, 250);
+      const wav = buildTestWav16(fs, samples);
+      const parsed = parseWav(wav);
+      add('WAV parser sample rate', parsed.sampleRate === fs, String(parsed.sampleRate));
+      add('WAV parser channels', parsed.channels === 1, String(parsed.channels));
+      add('WAV parser length', parsed.frameCount === samples.length, String(parsed.frameCount));
+      add('WAV parser peak sample', Math.abs(parsed.channelData[0][Math.round(fs * 0.25)] - 1) < 1e-3, parsed.channelData[0][Math.round(fs * 0.25)].toFixed(5));
+
+      const parsedFloat = parseWav(buildTestWavFloat32(fs, samples));
+      add('WAV parser float32 sample rate', parsedFloat.sampleRate === fs, String(parsedFloat.sampleRate));
+      add('WAV parser float32 format', parsedFloat.formatCode === 3 && parsedFloat.bitsPerSample === 32, parsedFloat.formatCode + '/' + parsedFloat.bitsPerSample);
+      add('WAV parser float32 peak sample', Math.abs(parsedFloat.channelData[0][Math.round(fs * 0.25)] - 1) < 1e-6, parsedFloat.channelData[0][Math.round(fs * 0.25)].toFixed(7));
+
+      const parsed24 = parseWav(buildTestWav24(fs, samples));
+      add('WAV parser PCM24 sample rate', parsed24.sampleRate === fs, String(parsed24.sampleRate));
+      add('WAV parser PCM24 format', parsed24.formatCode === 1 && parsed24.bitsPerSample === 24, parsed24.formatCode + '/' + parsed24.bitsPerSample);
+      add('WAV parser PCM24 peak sample', Math.abs(parsed24.channelData[0][Math.round(fs * 0.25)] - 1) < 1e-6, parsed24.channelData[0][Math.round(fs * 0.25)].toFixed(7));
+
+      const file = {
+        sampleRate: parsed.sampleRate,
+        channels: parsed.channels,
+        channelData: parsed.channelData
+      };
+      const analysis = computeAnalysis(file, 0, 500);
+      add('Analysis peak ≈ 250 ms', Math.abs(analysis.peakTimeMs - 250) < 0.1, analysis.peakTimeMs.toFixed(2) + ' ms');
+      add('Analysis uses 500 ms window', Math.abs(analysis.windowMs - 500) < 0.1, analysis.windowMs.toFixed(1) + ' ms');
+      add('FFT size is a power of two', (analysis.nfft & (analysis.nfft - 1)) === 0, String(analysis.nfft));
+
+      const curve = computeCurveData(analysis, {
+        smoothingOct: 1,
+        anchorHz: 1000,
+        fMin: 20,
+        fMax: 20000
+      });
+      add('Curve has exactly 31 points', curve.points.length === 31, String(curve.points.length));
+      add('Curve uses ISO 1/3-octave points', Math.abs(curve.points[1].f - 25) < 0.01 && Math.abs(curve.points[2].f - 31.5) < 0.01, curve.points[1].f.toFixed(1) + ' / ' + curve.points[2].f.toFixed(1));
+      add('Curve starts at 20 Hz', Math.abs(curve.points[0].f - 20) < 0.01, curve.points[0].f.toFixed(3));
+      add('Curve ends at 20 kHz', Math.abs(curve.points[curve.points.length - 1].f - 20000) < 0.5, curve.points[curve.points.length - 1].f.toFixed(1));
+      let increasing = true;
+      for (let i = 1; i < curve.points.length; i += 1) {
+        if (!(curve.points[i].f > curve.points[i - 1].f)) increasing = false;
+      }
+      add('Curve frequencies increase', increasing);
+      const db20 = curve.points[0].db;
+      const db20k = curve.points[curve.points.length - 1].db;
+      add('Target at 20 Hz ≈ 0 dB', Math.abs(db20) < 0.1, db20.toFixed(3) + ' dB');
+      add('Target at 20 kHz ≈ 0 dB', Math.abs(db20k) < 0.05, db20k.toFixed(3) + ' dB');
+      const nearAnchor = curve.points.reduce((best, p) => Math.abs(p.f - 1000) < Math.abs(best.f - 1000) ? p : best, curve.points[0]);
+      add('Target ≈ 0 dB near 1 kHz', Math.abs(nearAnchor.db) < 0.1, nearAnchor.f.toFixed(1) + ' Hz / ' + nearAnchor.db.toFixed(3) + ' dB');
+      const lines = curve.text.split('\n');
+      add('Text header is HouseCurve compatible', lines[0] === 'Hz\tdB', lines[0]);
+      add('Text line count matches points', lines.length === curve.points.length + 1, String(lines.length));
+      add('Text rows are tab separated', lines[1].split('\t').length === 2, lines[1]);
+    } catch (e) {
+      add('Self-test exception', false, e.message || String(e));
+    }
+    const passed = results.filter((r) => r.pass).length;
+    const total = results.length;
+    results.unshift({ label: 'Total: ' + passed + '/' + total + ' PASS', pass: passed === total, detail: '' });
+    els.selftestOutput.textContent = '';
+    for (const r of results) {
+      const line = document.createElement('div');
+      line.className = r.pass ? 'pass' : 'fail';
+      line.textContent = (r.pass ? 'PASS' : 'FAIL') + '  ' + r.label + (r.detail ? ' — ' + r.detail : '');
+      els.selftestOutput.appendChild(line);
+    }
+    els.selftestPanel.hidden = false;
+    els.selftestPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function resetSettings() {
+    state.smoothingOct = DEFAULTS.smoothingOct;
+    state.anchorHz = DEFAULTS.anchorHz;
+    state.windowMs = DEFAULTS.windowMs;
+    state.fMin = DEFAULTS.fMin;
+    state.fMax = DEFAULTS.fMax;
+    els.smoothing.value = String(DEFAULTS.smoothingOct);
+    els.anchor.value = String(DEFAULTS.anchorHz);
+    els.windowMs.value = String(DEFAULTS.windowMs);
+    els.fMin.value = String(DEFAULTS.fMin);
+    els.fMax.value = String(DEFAULTS.fMax);
+    if (state.file && !state.file.error) rebuildAnalysis();
+    else renderAll();
+  }
+
+  function init() {
+    els.dropzone.addEventListener('click', () => {
+      if (!state.busy) els.fileInput.click();
+    });
+    els.dropzone.addEventListener('keydown', (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && !state.busy) {
+        e.preventDefault();
+        els.fileInput.click();
+      }
+    });
+    els.dropzone.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      els.dropzone.classList.add('drag');
+    });
+    els.dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      els.dropzone.classList.add('drag');
+    });
+    els.dropzone.addEventListener('dragleave', (e) => {
+      if (e.relatedTarget && els.dropzone.contains(e.relatedTarget)) return;
+      els.dropzone.classList.remove('drag');
+    });
+    els.dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      els.dropzone.classList.remove('drag');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+        handleFiles(e.dataTransfer.files);
+      }
+    });
+    window.addEventListener('dragover', (e) => e.preventDefault());
+    window.addEventListener('drop', (e) => e.preventDefault());
+
+    els.fileInput.addEventListener('change', () => {
+      handleFiles(els.fileInput.files);
+      els.fileInput.value = '';
+    });
+
+    els.channel.addEventListener('change', () => {
+      state.channelIndex = Number(els.channel.value) || 0;
+      rebuildAnalysis();
+    });
+
+    els.smoothing.addEventListener('change', () => {
+      state.smoothingOct = Number(els.smoothing.value) || DEFAULTS.smoothingOct;
+      scheduleCurve();
+    });
+
+    els.advancedToggle.addEventListener('click', () => {
+      const willOpen = els.advancedPanel.hidden;
+      els.advancedPanel.hidden = !willOpen;
+      els.advancedToggle.setAttribute('aria-expanded', String(willOpen));
+      els.advancedToggle.textContent = willOpen ? 'Hide advanced settings' : 'Advanced settings';
+    });
+
+    els.windowMs.addEventListener('change', () => {
+      state.windowMs = Number(els.windowMs.value) || DEFAULTS.windowMs;
+      if (state.file && !state.file.error) rebuildAnalysis();
+    });
+    els.anchor.addEventListener('input', () => {
+      const v = Number(els.anchor.value);
+      if (Number.isFinite(v) && v > 0) {
+        state.anchorHz = v;
+        scheduleCurve();
+      }
+    });
+    els.anchor.addEventListener('change', () => {
+      const v = clamp(parseInputNumber(els.anchor, DEFAULTS.anchorHz), 5, 200000);
+      state.anchorHz = v;
+      els.anchor.value = String(v);
+      scheduleCurve();
+    });
+    els.fMin.addEventListener('change', () => {
+      const v = clamp(parseInputNumber(els.fMin, DEFAULTS.fMin), 5, 200000);
+      state.fMin = v;
+      els.fMin.value = String(v);
+      scheduleCurve();
+    });
+    els.fMax.addEventListener('change', () => {
+      const v = clamp(parseInputNumber(els.fMax, DEFAULTS.fMax), 10, 200000);
+      state.fMax = v;
+      els.fMax.value = String(v);
+      scheduleCurve();
+    });
+    els.resetSettings.addEventListener('click', resetSettings);
+
+    els.clear.addEventListener('click', clearAll);
+    els.copy.addEventListener('click', copyCurve);
+    els.download.addEventListener('click', downloadCurve);
+    els.selftest.addEventListener('click', runSelfTest);
+
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(renderChart, 120);
+    });
+    if (window.ResizeObserver) {
+      const observer = new ResizeObserver(() => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(renderChart, 120);
+      });
+      observer.observe(els.chart.parentElement);
+    }
+
+    renderAll();
+
+    if (new URLSearchParams(location.search).get('selftest') === '1') {
+      setTimeout(runSelfTest, 120);
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
